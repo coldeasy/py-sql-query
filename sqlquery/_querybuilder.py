@@ -24,6 +24,10 @@ from six import string_types
 
 
 class InvalidQueryException(Exception):
+    """
+    Raised whenever invalid data is found when the query is being created via
+    :py:meth:`.QueryBuilder.sql`
+    """
     pass
 
 
@@ -119,6 +123,12 @@ _empty_query_data = QueryData(**{field: None for field in QueryData._fields})
 
 
 class QueryBuilder(object):
+    """
+    This is the main workhorse for modifying/creating queries.
+    Unless otherwise stated, all methods return a copy of the class and do not
+    modifying the query of the reference class. This allows both method
+    chaining and the ability to easily reuse queries.
+    """
     def __init__(self, query_data=None):
         self._query_data = query_data or _empty_query_data
         self._table_alias_gen = itertools.cycle(string.ascii_lowercase)
@@ -126,59 +136,116 @@ class QueryBuilder(object):
             table_alias=(next(self._table_alias_gen))
         )
 
-    def copy(self, new_query_data):
-        """
-        """
-        return self.__class__(new_query_data)
-
     def _replace(self, **kwargs):
         return self.copy(self._query_data._replace(**kwargs))
 
+    def copy(self, new_query_data):
+        """
+        Returns a copy of this class.
+        """
+        return self.__class__(new_query_data)
+
     def select(self, *names):
         """
+        See :py:func:`~.queryapi.select`
         """
-        return self._replace(select=tuple(names))
+        return self._replace(select=names)
 
     def update(self, **data):
         """
+        See :py:func:`~.queryapi.update`
         """
         return self._replace(update=data)
 
-    def replace(self, *data):
-        """
-        """
-        ret = self.insert(*data)
-        return ret._replace(insert_replace=True)
-
-    def insert_ignore(self, *data):
-        """
-        """
-        ret = self.insert(*data)
-        return ret._replace(insert_ignore=True)
-
     def insert(self, *data):
         """
+        See :py:func:`~.queryapi.insert`
         """
         assert all(isinstance(x, dict) for x in data)
         return self._replace(insert=data)
 
+    def insert_ignore(self, *data):
+        """
+        See :py:func:`~.queryapi.insert_ignore`
+        """
+        ret = self.insert(*data)
+        return ret._replace(insert_ignore=True)
+
+    def replace(self, *data):
+        """
+        See :py:func:`~.queryapi.replace`
+        """
+        ret = self.insert(*data)
+        return ret._replace(insert_replace=True)
+
     def delete(self):
         """
+        See :py:func:`~.queryapi.delete`
         """
         return self._replace(delete=True)
 
     def on_table(self, table):
         """
+        Identifies the main table the query should be executed upon. E.g. if
+        `table` were `users` then the equivalent result would be:
+
+        ::
+
+            SELECT * FROM users
+
         """
         return self._replace(table=table)
 
     def on_duplicate_key_update(self, **col_values):
         """
+        With one of the insertion statements, this causes an `UPDATE` to be
+        executed if the insert causes an integrity error. Generates the
+        relevant
+
+        ::
+
+            INSERT ... ON DUPLICATE KEY UPDATE ...
+
+        *col_values* should be a list of columns/values to be updated. If
+        column/values is not given, then the main columns will be used
+        resulting in a query like:
+
+        ::
+
+            INSERT INTO table (x) VALUES (1)
+            ON DUPLICATE KEY UPDATE x = VALUES(1)
+
         """
         return self._replace(duplicate_key_update=(True, col_values))
 
     def where(self, *conditions):
         """
+        Used to create a `WHERE` clause. All items in *conditions* must either
+        be a tuple of the form:
+
+        ::
+
+            >>> ("column__operator", value)
+
+        where `column` is the name of the DB column. `operator` should be one
+        of the comparison operators support as specified in
+        :py:data:`.sqlencoding.OPERATOR_MAPPING`. These two are joined
+        together in a string, separated by ``__``.
+
+        Alteratively an item can represent a complex condition joined by a
+        boolean operator like `AND`. You can use the
+
+        :py:func:`~.queryapi.AND`
+        :py:func:`~.queryapi.OR`
+        :py:func:`~.queryapi.XOR`
+
+        functions in this module to created these. For example
+
+        ::
+
+            >>> QueryBuilder().where(
+                    logical_or(("field__eq", 2), ("field2__eq", 4))
+                )
         """
         assert conditions
         return self._replace(where=logical_and(conditions))
@@ -188,6 +255,7 @@ class QueryBuilder(object):
         Joins the current query with the given *join_table* on *join_field*
         which is a field on *join_table* and *main_field* which is a field
         represented on the current table.
+
         If *join_field* is not given then it uses *main_field* on the
         *join_table*.
         """
@@ -203,12 +271,32 @@ class QueryBuilder(object):
 
     def having(self, *conditions):
         """
+        Used to create a `HAVING` clause. The *conditions* argument has the
+        same semantics as in :py:meth:`~.where`
         """
         assert conditions
         return self._replace(having=logical_and(conditions))
 
     def order_by(self, *fields):
         """
+        Used to create an `ORDER BY` clause. Each item in *fields* should be a
+        column name or you can use the
+        :py:func:`~.queryapi.ASC`
+        :py:func:`~.queryapi.DESC`
+        to change the ordering of the field.
+        For example
+
+        ::
+
+            >>> QueryBuilder().order_by(DESC("field1"), "field2")
+
+        will make an ORDER BY clause which would create something equivalent
+        to:
+
+        ::
+
+            ORDER BY field1 DESC, field2
+
         """
         assert all(
             [isinstance(field, (string_types, _SQLOrdering))
@@ -218,29 +306,52 @@ class QueryBuilder(object):
 
     def group_by(self, *fields):
         """
+        Used to create a `GROUP BY` clause. Each item in *fields* should be a
+        column name.
         """
         assert all(
             [isinstance(field, string_types) for field in fields]
         )
         return self._replace(group_by=tuple(fields))
 
-    def offset(self, count):
+    def offset(self, offset):
         """
+        Used to create an `OFFSET` clause. Warning, this may result in an
+        ineffecient query if a large offset is chosen.
         """
-        return self._replace(offset=int(count))
+        return self._replace(offset=int(offset))
 
     def limit(self, count):
         """
+        Used to create an `LIMIT` clause. This reduces the number of rows that
+        will be returned.
         """
         return self._replace(limit=int(count))
 
     def compiler(self):
         """
+        Returns the compiler that will be used to generate the final query. In
+        most cases you won't need to call this, and instead :py:meth:`~.sql`
+        will all that's needed.
         """
         return SQLCompiler(self._query_data)
 
     def sql(self):
         """
+        Composes the current query and returns a tuple containing:
+
+        ::
+
+            >>> ("<query_string>",
+                 (
+                     # tuple of arguments
+                 )
+                )
+
+        `query_string` is the final string that can be passed to the DB client
+        library. `arguments` is the list of arguments that are required for the
+        query and should also be passed to the DB client library. Each argument
+        will have a "%s" placeholder in the query string.
         """
         return SQLCompiler(self._query_data).sql()
 
