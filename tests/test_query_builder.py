@@ -274,7 +274,7 @@ class SQLCompilerInsertTestCase(_BaseTestCase):
 
     def test__generate_insert_single_row(self):
         for fun, query in self._iter_each_insert_fun():
-            compiler = fun(test=1, test2=2).on_table("table").compiler()
+            compiler = fun(dict(test=1, test2=2)).on_table("table").compiler()
 
             sql, args = compiler._generate_insert()
 
@@ -311,7 +311,7 @@ class SQLCompilerInsertTestCase(_BaseTestCase):
         for fun, query in self._iter_each_insert_fun():
             compiler = fun(
                 dict(test=1, test2=2),
-                test=5, test2=6
+                dict(test=5, test2=6)
             ).on_table("table").compiler()
 
             sql, args = compiler._generate_insert()
