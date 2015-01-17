@@ -20,6 +20,8 @@ from sqlquery.sqlencoding import (
     SQL_JOIN_TYPE_INNER
 )
 
+from six import string_types
+
 
 class InvalidQueryException(Exception):
     pass
@@ -142,24 +144,22 @@ class QueryBuilder(object):
         """
         return self._replace(update=data)
 
-    def replace(self, *data, **col_values):
+    def replace(self, *data):
         """
         """
-        ret = self.insert(*data, **col_values)
+        ret = self.insert(*data)
         return ret._replace(insert_replace=True)
 
-    def insert_ignore(self, *data, **col_values):
+    def insert_ignore(self, *data):
         """
         """
-        ret = self.insert(*data, **col_values)
+        ret = self.insert(*data)
         return ret._replace(insert_ignore=True)
 
-    def insert(self, *data, **col_values):
+    def insert(self, *data):
         """
         """
         assert all(isinstance(x, dict) for x in data)
-        if col_values:
-            data += (col_values,)
         return self._replace(insert=data)
 
     def delete(self):
@@ -211,7 +211,7 @@ class QueryBuilder(object):
         """
         """
         assert all(
-            [isinstance(field, (basestring, _SQLOrdering))
+            [isinstance(field, (string_types, _SQLOrdering))
              for field in fields]
         )
         return self._replace(order_by=tuple(fields))
@@ -220,7 +220,7 @@ class QueryBuilder(object):
         """
         """
         assert all(
-            [isinstance(field, basestring) for field in fields]
+            [isinstance(field, string_types) for field in fields]
         )
         return self._replace(group_by=tuple(fields))
 
@@ -268,38 +268,38 @@ class SQLCompiler(object):
             include_alias=include_alias
         )
 
-    def _encode_join_table_name(self, include_alias=True):
+    def _encode_join_table_name(self):
         return encode_table_name(
             self.query_data.join.table,
             self.query_data.join.table_alias,
-            include_alias=include_alias
+            include_alias=True
         )
 
-    def _encode_field(self, field, include_alias=True):
+    def _encode_field(self, field):
         return encode_field(
             field,
             self.query_data.table,
             self.query_data.table_alias,
-            include_alias=include_alias
+            include_alias=True
         )
 
-    def _encode_join_field(self, field, include_alias=True):
+    def _encode_join_field(self, field):
         return encode_field(
             field,
             self.query_data.join.table,
             self.query_data.join.table_alias,
-            include_alias=include_alias
+            include_alias=True
         )
 
-    def _smart_encode_field(self, field, include_alias=True):
+    def _smart_encode_field(self, field):
         if (
             self.query_data.join and
-            isinstance(field, basestring) and
+            isinstance(field, string_types) and
             field.startswith(self.query_data.join.table + '.')
         ):
-            return self._encode_join_field(field, include_alias=include_alias)
+            return self._encode_join_field(field)
 
-        return self._encode_field(field, include_alias=include_alias)
+        return self._encode_field(field)
 
     def _generate_join(self):
         query = [
@@ -418,7 +418,7 @@ class SQLCompiler(object):
             clause.extend([field, convert_op(op)])
             args = [value]
             if (
-                not isinstance(value, basestring) and
+                not isinstance(value, string_types) and
                 isinstance(value, collections.Iterable)
             ):
                 clause.append(u"({})".format(u",".join([u"%s"] * len(value))))
@@ -488,7 +488,7 @@ class SQLCompiler(object):
 
         query = [u"ORDER BY"]
         for order_by in _query_joiner(query, self.query_data.order_by):
-            if isinstance(order_by, basestring):
+            if isinstance(order_by, string_types):
                 query.append(self._smart_encode_field(order_by))
             else:
                 query.extend(

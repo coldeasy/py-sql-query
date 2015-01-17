@@ -1,3 +1,5 @@
+from collections import OrderedDict
+from mock import patch
 from unittest import TestCase
 
 from sqlquery.queryapi import COUNT, AND, OR, XOR, ASC, DESC
@@ -5,10 +7,49 @@ from sqlquery.queryapi import InvalidQueryException
 from sqlquery._querybuilder import QueryBuilder, serialize_query_tokens
 
 
-class SQLCompilerSelectTestCase(TestCase):
+def _ordered_dict_from_dict(unordered_dict):
+    ordered = OrderedDict()
+    for key in sorted(unordered_dict.keys()):
+        ordered[key] = unordered_dict[key]
+
+    return ordered
+
+
+def _ordered_copy(self, **kwargs):
+    if 'update' in kwargs:
+        kwargs['update'] = _ordered_dict_from_dict(kwargs['update'])
+    if 'insert' in kwargs:
+        kwargs['insert'] = [
+            _ordered_dict_from_dict(row)
+            for row in kwargs['insert']
+        ]
+
+    for list_entry in ('select', 'having', 'group_by', 'where'):
+        if list_entry in kwargs:
+            if isinstance(kwargs[list_entry], tuple):
+                kwargs[list_entry] = tuple(sorted(kwargs[list_entry]))
+            elif isinstance(kwargs[list_entry], list):
+                kwargs[list_entry] = sorted(kwargs[list_entry])
+            else:
+                kwargs[list_entry] = kwargs[list_entry]
+
+    return QueryBuilder(self._query_data._replace(**kwargs))
+
+
+class _BaseTestCase(TestCase):
     def setUp(self):
+        self._patch_start_query_builder_replace()
         self.builder = QueryBuilder()
 
+    def tearDown(self):
+        self.__patched.__exit__()
+
+    def _patch_start_query_builder_replace(self):
+        self.__patched = patch.object(QueryBuilder, '_replace', _ordered_copy)
+        self.__patched.__enter__()
+
+
+class SQLCompilerSelectTestCase(_BaseTestCase):
     def test__generate_select_single_element(self):
         compiler = self.builder.select("test").on_table("table").compiler()
 
@@ -61,9 +102,9 @@ class SQLCompilerSelectTestCase(TestCase):
             ).sql()
 
 
-class SQLCompilerWhereTestCase(TestCase):
+class SQLCompilerWhereTestCase(_BaseTestCase):
     def setUp(self):
-        self.builder = QueryBuilder()
+        super(SQLCompilerWhereTestCase, self).setUp()
         self.basic_select = self.builder.select("test").on_table("table")
         self.op_mapping = {
             'eq': "<=>",
@@ -78,7 +119,7 @@ class SQLCompilerWhereTestCase(TestCase):
         }
 
     def test__generate_all_where_ops(self):
-        for (op, sql_op) in self.op_mapping.iteritems():
+        for (op, sql_op) in self.op_mapping.items():
             compiler = self.basic_select.where(
                 ("test1__" + op, 2)
             ).compiler()
@@ -202,10 +243,10 @@ class SQLCompilerWhereTestCase(TestCase):
         )
 
 
-class SQLCompilerHavingTestCase(TestCase):
+class SQLCompilerHavingTestCase(_BaseTestCase):
     # Most of having functionality is already covered by `where` cases
     def setUp(self):
-        self.builder = QueryBuilder()
+        super(SQLCompilerHavingTestCase, self).setUp()
         self.basic_select = self.builder.select("test").on_table("table")
 
     def test__generate_having_aggregate_func(self):
@@ -222,10 +263,7 @@ class SQLCompilerHavingTestCase(TestCase):
         self.assertEqual(args, [1])
 
 
-class SQLCompilerInsertTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerInsertTestCase(_BaseTestCase):
     def _iter_each_insert_fun(self):
         for (fun, query) in [
             (self.builder.insert, "INSERT"),
@@ -289,10 +327,7 @@ class SQLCompilerInsertTestCase(TestCase):
             )
 
 
-class SQLCompilerUpdateTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerUpdateTestCase(_BaseTestCase):
     def test__generate_update_single_field(self):
         compiler = self.builder.update(
             test=1
@@ -326,10 +361,7 @@ class SQLCompilerUpdateTestCase(TestCase):
         )
 
 
-class SQLCompilerOffsetTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerOffsetTestCase(_BaseTestCase):
     def test__generate_offset(self):
         compiler = self.builder.select(
             "test"
@@ -347,10 +379,7 @@ class SQLCompilerOffsetTestCase(TestCase):
         )
 
 
-class SQLCompilerLimitTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerLimitTestCase(_BaseTestCase):
     def test__generate_limit(self):
         compiler = self.builder.select(
             "test"
@@ -368,10 +397,7 @@ class SQLCompilerLimitTestCase(TestCase):
         )
 
 
-class SQLCompilerOrderByTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerOrderByTestCase(_BaseTestCase):
     def test__generate_order_by(self):
         compiler = self.builder.select(
             "test"
@@ -430,10 +456,7 @@ class SQLCompilerOrderByTestCase(TestCase):
         self.assertEqual(args, [])
 
 
-class SQLCompilerGroupByTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerGroupByTestCase(_BaseTestCase):
     def test__generate_group_by(self):
         compiler = self.builder.select(
             "test"
@@ -461,10 +484,7 @@ class SQLCompilerGroupByTestCase(TestCase):
         self.assertEqual(args, [])
 
 
-class SQLCompilerCompositeTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerCompositeTestCase(_BaseTestCase):
     def test__generate_full_select_query_ordered_by(self):
         compiler = self.builder.select(
             "test"
@@ -508,10 +528,7 @@ class SQLCompilerCompositeTestCase(TestCase):
         )
 
 
-class SQLCompilerJoinTestCase(TestCase):
-    def setUp(self):
-        self.builder = QueryBuilder()
-
+class SQLCompilerJoinTestCase(_BaseTestCase):
     def test__generate_full_join_simple_select(self):
         compiler = self.builder.select(
             "test", "test2"
@@ -538,9 +555,9 @@ class SQLCompilerJoinTestCase(TestCase):
 
     def test__generate_full_join_complex_select(self):
         compiler = self.builder.select(
-            "test", "test2", "table2.field1"
+            "test", "test2", "z_other.field1"
         ).on_table("table").join(
-            "table2",
+            "z_other",
             "field1",
         ).where(
             ('test__eq', 1), ('test2__eq', 2)
@@ -551,7 +568,7 @@ class SQLCompilerJoinTestCase(TestCase):
         self.assertEqual(
             "SELECT `a`.`test`, `a`.`test2`, `b`.`field1` "
             "FROM `table` AS `a` "
-            "INNER JOIN `table2` AS `b` ON `a`.`field1` = `b`.`field1` "
+            "INNER JOIN `z_other` AS `b` ON `a`.`field1` = `b`.`field1` "
             "WHERE (`a`.`test` <=> %s) AND (`a`.`test2` <=> %s) "
             "ORDER BY `a`.`test` OFFSET %s LIMIT %s",
             sql
@@ -563,12 +580,12 @@ class SQLCompilerJoinTestCase(TestCase):
 
     def test__generate_full_join_complex_select_complex_where(self):
         compiler = self.builder.select(
-            "test", "test2", "table2.field1"
+            "test", "test2", "z_other.field1"
         ).on_table("table").join(
-            "table2",
+            "z_other",
             "field1",
         ).where(
-            ('test__eq', 1), ('test2__eq', 2), ('table2.field1__eq', 'mont')
+            ('test__eq', 1), ('test2__eq', 2), ('z_other.field1__eq', 'mont')
         ).limit(10).offset(10).order_by("test").compiler()
 
         sql, args = compiler.sql()
@@ -576,7 +593,7 @@ class SQLCompilerJoinTestCase(TestCase):
         self.assertEqual(
             "SELECT `a`.`test`, `a`.`test2`, `b`.`field1` "
             "FROM `table` AS `a` "
-            "INNER JOIN `table2` AS `b` ON `a`.`field1` = `b`.`field1` "
+            "INNER JOIN `z_other` AS `b` ON `a`.`field1` = `b`.`field1` "
             "WHERE (`a`.`test` <=> %s) AND (`a`.`test2` <=> %s) "
             "AND (`b`.`field1` <=> %s) "
             "ORDER BY `a`.`test` OFFSET %s LIMIT %s",

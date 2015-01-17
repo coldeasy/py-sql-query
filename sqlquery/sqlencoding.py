@@ -1,4 +1,8 @@
 import contextlib
+
+from six import string_types
+
+
 OPERATOR_MAPPING = {
     'eq': "<=>",
     'neq': "<>",
@@ -49,7 +53,7 @@ def encode_func(func, field):
 
 
 def encode_field(field, table_name, table_alias, include_alias=True):
-    if not include_alias or not isinstance(field, basestring):
+    if not include_alias or not isinstance(field, string_types):
         return quoted(field.value)
 
     prefix = table_alias

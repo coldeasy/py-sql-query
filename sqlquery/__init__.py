@@ -1,0 +1,5 @@
+__title__ = 'sqlquery'
+__version__ = '0.0.1'
+__author__ = 'Colin Deasy'
+__license__ = 'Apache 2.0'
+__copyright__ = 'Copyright 2015 Colin Deasy'

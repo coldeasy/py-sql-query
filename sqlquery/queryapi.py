@@ -1,6 +1,7 @@
 """
 """
 from sqlquery import _querybuilder
+from sqlquery._querybuilder import QueryBuilder
 
 
 SQLFunction = _querybuilder.SQLFunction
@@ -65,7 +66,7 @@ def select(*names):
     Create a select clause, e.g. `SELECT ...`
     *names* here should be a list of column names that will selected.
     """
-    return _querybuilder.QueryBuilder().select(*names)
+    return QueryBuilder().select(*names)
 
 
 def update(**data):
@@ -74,40 +75,37 @@ def update(**data):
     *data* here should be a list of key value pairs that will used for
     updating.
     """
-    return _querybuilder.QueryBuilder().update(**data)
+    return QueryBuilder().update(**data)
 
 
-def insert(*data, **col_values):
+def insert(*data):
     """
     Create an insert clause, e.g. `INSERT INTO ...`
-    If set, *col_values* should a all key/values that will be inserted as a
     row.
     If set, *data* should contain a list of dicts with all key/values that
     will be inserted as a row.
-    E.g.
-        k
     """
-    return _querybuilder.QueryBuilder().insert(*data, **col_values)
+    return QueryBuilder().insert(*data)
 
 
-def insert_ignore(*data, **col_values):
+def insert_ignore(*data):
     """
     Create an insert ignore clause, e.g. `INSERT IGNORE INTO ...`
     See :py:func:`insert` for arguments
     """
-    return _querybuilder.QueryBuilder().insert_ignore(*data, **col_values)
+    return QueryBuilder().insert_ignore(*data)
 
 
-def replace(*data, **col_values):
+def replace(*data):
     """
     Create a replace clause, e.g. `REPLACE INTO ...`
     See :py:func:`insert` for arguments
     """
-    return _querybuilder.QueryBuilder().replace(*data, **col_values)
+    return QueryBuilder().replace(*data)
 
 
 def delete():
     """
     Create a delete clause, e.g. `DELETE ...`
     """
-    return _querybuilder.QueryBuilder().delete()
+    return QueryBuilder().delete()
