@@ -10,10 +10,10 @@ ci: init
 	nosetests --xunit-file=junit.xml
 
 publish:
-	python setup.py register
-	python setup.py sdist upload
-	python setup.py bdist_wheel upload
+	python setup.py register sdist bdist_wheel upload
 
+build:
+	python setup.py build
 
 docs:
 	cd docs && make html
