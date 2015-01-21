@@ -95,6 +95,18 @@ class SQLCompilerSelectTestCase(_BaseTestCase):
             (serialize_query_tokens(sql), args)
         )
 
+    def test__generate_select_with_schema(self):
+        compiler = self.builder.select(
+            'users'
+        ).on_table("table", schema='myschema').compiler()
+
+        sql, args = compiler._generate_select()
+
+        self.assertEqual(
+            ("SELECT `a`.`users` FROM `myschema`.`table` AS `a`", []),
+            (serialize_query_tokens(sql), args)
+        )
+
     def test__generate_select_no_element_raises(self):
         with self.assertRaises(InvalidQueryException):
             self.builder.select().on_table(
@@ -134,6 +146,39 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
                 [2],
                 args
             )
+
+    def test__generate_where_in_literals(self):
+        compiler = self.basic_select.where(
+            ("test1__in", [1, 2, 3])
+        ).compiler()
+
+        sql, args = compiler._generate_where()
+
+        self.assertEqual(
+            "WHERE (`a`.`test1` IN (%s,%s,%s))",
+            serialize_query_tokens(sql)
+        )
+        self.assertEqual(args, [1, 2, 3])
+
+    def test__generate_where_in_query(self):
+        compiler = self.basic_select.where(
+            (
+                "test1__in",
+                self.builder.select("id").on_table("table2").where(
+                    ("test2__eq", 4)
+                )
+            )
+        ).compiler()
+
+        sql, args = compiler._generate_where()
+
+        self.assertEqual(
+            "WHERE (`a`.`test1` IN (SELECT `b`.`id` FROM `table2` AS `b` "
+            "WHERE (`b`.`test2` <=> %s)))"
+            ,
+            serialize_query_tokens(sql)
+        )
+        self.assertEqual(args, [4])
 
     def test__generate_is_null(self):
         for (op, sql_op) in {"is": "IS NULL", "isnot": "IS NOT NULL"}.items():

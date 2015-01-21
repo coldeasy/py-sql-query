@@ -64,12 +64,18 @@ def encode_field(field, table_name, table_alias, include_alias=True):
     return quoted(prefix) + '.' + quoted(field)
 
 
-def encode_table_name(table_name, table_alias, include_alias=True):
+def encode_table_name(table_name, table_alias, table_schema,
+                      include_alias=True):
+    if table_schema:
+        name = "{}.{}".format(quoted(table_schema), quoted(table_name))
+    else:
+        name = quoted(table_name)
+
     if not include_alias:
-        return quoted(table_name)
+        return name
 
     return (
-        quoted(table_name)
+        name
         + " AS "
         + quoted(table_alias)
     )

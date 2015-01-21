@@ -44,7 +44,7 @@ def logical_xor(conditions):
 
 
 def count(field):
-    return SQLFunction(convert_func("count"), field or Scalar('1'))
+    return SQLFunction(convert_func("count"), field or Literal('1'))
 
 
 def order_descending(field):
@@ -55,7 +55,7 @@ def order_ascending(field):
     return _SQLOrdering(field, SQL_ASC)
 
 
-class Scalar(object):
+class Literal(object):
     def __init__(self, value):
         self.value = value
 
@@ -84,14 +84,23 @@ class _SQLOrdering(object):
         self.direction = direction
 
 
+TableOptions = namedtuple(
+    'TableOptions',
+    [
+        'schema',
+        'name',
+        'alias'
+    ]
+)
+
+
 JoinOptions = namedtuple(
     'JoinOptions',
     [
         'join_type',
         'main_field',
         'join_field',
-        'table',
-        'table_alias'
+        'table'
     ]
 )
 
@@ -114,7 +123,6 @@ QueryData = namedtuple(
         'insert_ignore',
         'insert_replace',
         'join',
-        'table_alias',
     ]
 )
 
@@ -130,11 +138,10 @@ class QueryBuilder(object):
     chaining and the ability to easily reuse queries.
     """
     def __init__(self, query_data=None):
-        self._query_data = query_data or _empty_query_data
-        self._table_alias_gen = itertools.cycle(string.ascii_lowercase)
-        self._query_data = self._query_data._replace(
-            table_alias=(next(self._table_alias_gen))
-        )
+        if not query_data:
+            query_data = _empty_query_data
+
+        self._query_data = query_data
 
     def _replace(self, **kwargs):
         return self.copy(self._query_data._replace(**kwargs))
@@ -184,7 +191,7 @@ class QueryBuilder(object):
         """
         return self._replace(delete=True)
 
-    def on_table(self, table):
+    def on_table(self, table, schema=None):
         """
         Identifies the main table the query should be executed upon. E.g. if
         `table` were `users` then the equivalent result would be:
@@ -194,6 +201,10 @@ class QueryBuilder(object):
             SELECT * FROM users
 
         """
+        if not self._query_data.table:
+            table = TableOptions(name=table, schema=schema, alias=None)
+        else:
+            table = self._query_data.table._replace(table=table, schema=schema)
         return self._replace(table=table)
 
     def on_duplicate_key_update(self, **col_values):
@@ -250,7 +261,7 @@ class QueryBuilder(object):
         assert conditions
         return self._replace(where=logical_and(conditions))
 
-    def join(self, join_table, main_field, join_field=None):
+    def join(self, join_table, main_field, join_field=None, schema=None):
         """
         Joins the current query with the given *join_table* on *join_field*
         which is a field on *join_table* and *main_field* which is a field
@@ -264,8 +275,11 @@ class QueryBuilder(object):
                 join_type=SQL_JOIN_TYPE_INNER,
                 main_field=main_field,
                 join_field=join_field or main_field,
-                table=join_table,
-                table_alias=next(self._table_alias_gen)
+                table=TableOptions(
+                    name=join_table,
+                    schema=schema,
+                    alias=None
+                )
             )
         )
 
@@ -363,42 +377,56 @@ def _query_joiner(query, iterable, join_with=", "):
             query.append(join_with)
 
 
-class QueryString(list):
-    def append(self, value, spaced_left=False, spaced_right=False):
-        super(QueryString, self).append(value)
-
-
 class SQLCompiler(object):
-    def __init__(self, query_data):
+    def __init__(self, query_data, alias_gen=None):
+        # generate the aliases
+        if alias_gen:
+            self.alias_gen = alias_gen
+        else:
+            self.alias_gen = itertools.cycle(string.ascii_lowercase)
+
+        query_data = query_data._replace(
+            table=query_data.table._replace(alias=next(self.alias_gen))
+        )
+        if query_data.join:
+            query_data = query_data._replace(
+                join=query_data.join._replace(
+                    table=query_data.join.table._replace(
+                        alias=next(self.alias_gen)
+                    )
+                )
+            )
         self.query_data = query_data
 
     def _encode_main_table_name(self, include_alias=True):
         return encode_table_name(
-            self.query_data.table,
-            self.query_data.table_alias,
+            self.query_data.table.name,
+            self.query_data.table.alias,
+            self.query_data.table.schema,
             include_alias=include_alias
         )
 
     def _encode_join_table_name(self):
         return encode_table_name(
-            self.query_data.join.table,
-            self.query_data.join.table_alias,
+            self.query_data.join.table.name,
+            self.query_data.join.table.alias,
+            self.query_data.join.table.schema,
             include_alias=True
         )
 
     def _encode_field(self, field):
         return encode_field(
             field,
-            self.query_data.table,
-            self.query_data.table_alias,
+            self.query_data.table.name,
+            self.query_data.table.alias,
             include_alias=True
         )
 
     def _encode_join_field(self, field):
         return encode_field(
             field,
-            self.query_data.join.table,
-            self.query_data.join.table_alias,
+            self.query_data.join.table.name,
+            self.query_data.join.table.alias,
             include_alias=True
         )
 
@@ -406,7 +434,7 @@ class SQLCompiler(object):
         if (
             self.query_data.join and
             isinstance(field, string_types) and
-            field.startswith(self.query_data.join.table + '.')
+            field.startswith(self.query_data.join.table.name + '.')
         ):
             return self._encode_join_field(field)
 
@@ -527,18 +555,25 @@ class SQLCompiler(object):
         clause = []
         with in_brackets(clause):
             clause.extend([field, convert_op(op)])
-            args = [value]
-            if (
+            if isinstance(value, QueryBuilder):
+                with in_brackets(clause):
+                    sql, sql_args = SQLCompiler(value._query_data,
+                                                self.alias_gen)._raw_sql()
+                    clause.extend(sql)
+                args = list(sql_args)
+            elif (
                 not isinstance(value, string_types) and
                 isinstance(value, collections.Iterable)
             ):
-                clause.append(u"({})".format(u",".join([u"%s"] * len(value))))
+                args = list(value)
+                clause.append(u"({})".format(u",".join([u"%s"] * len(args))))
             elif value is None:
                 clause.append(SQL_NULL)
                 # we get rid of the value as it is represented as null
-                del args[:]
+                args = []
             else:
                 clause.append(u"%s")
+                args = [value]
 
         return clause, args
 
@@ -644,7 +679,7 @@ class SQLCompiler(object):
 
         raise InvalidQueryException
 
-    def sql(self):
+    def _raw_sql(self):
         if not self.query_data.table:
             raise Exception("requires both select and from")
 
@@ -659,8 +694,12 @@ class SQLCompiler(object):
         sql, sql_args = zip(
             main, where, group_by, having, order_by, offset, limit
         )
+        return itertools.chain(*sql), tuple(itertools.chain(*sql_args))
+
+    def sql(self):
+        sql, sql_args = self._raw_sql()
 
         return (
-            serialize_query_tokens(itertools.chain(*sql)),
-            tuple(itertools.chain(*sql_args))
+            serialize_query_tokens(sql),
+            sql_args
         )

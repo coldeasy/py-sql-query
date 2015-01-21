@@ -41,6 +41,20 @@ A simple order by statement
     >>> select("id").on_table("users").order_by("id").sql()
     (u'SELECT `a`.`id` FROM `users` AS `a` ORDER BY `a`.`id`', ())
 
+A subquery
+~~~~~~~~~~
+.. code-block:: python
+
+    >>> from sqlquery.queryapi import select
+    >>> select(
+          "username", "id"
+        ).on_table("users").where(
+          ("id__in", select("id").on_table("banned_users"))
+        ).sql()
+    (u'SELECT `a`.`username`, `a`.`id` FROM `users` AS `a` WHERE (`a`.`id` IN (SELECT `b`.`id` FROM `banned_users` AS `b`))',
+     ())
+
+
 A more involved statement
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 .. code-block:: python
