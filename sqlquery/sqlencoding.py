@@ -20,6 +20,9 @@ FUNC_MAPPING = {
     'avg': "AVG",
     'max': "MAX",
     'min': "MIN",
+    'sum': "SUM",
+    'utcnow': "UTC_TIMESTAMP",
+    'unix_timestamp': "UNIX_TIMESTAMP",
 }
 
 
@@ -32,6 +35,10 @@ SQL_XOR = "XOR"
 
 SQL_JOIN_TYPE_OUTER = "OUTER JOIN"
 SQL_JOIN_TYPE_INNER = "INNER JOIN"
+
+
+class _Func(str):
+    pass
 
 
 @contextlib.contextmanager
@@ -47,9 +54,9 @@ def quoted(element):
     return u"`{!s}`".format(element)
 
 
-def encode_func(func, field):
-    sql_func = FUNC_MAPPING.get(func, func)
-    return u"{}({})".format(sql_func, field)
+def encode_func_name(funcname):
+    sql_func = FUNC_MAPPING.get(funcname, funcname)
+    return _Func(sql_func)
 
 
 def encode_field(field, table_name, table_alias, include_alias=True):
@@ -94,7 +101,7 @@ def is_space(value):
 
 
 def is_function(value):
-    return value in FUNC_MAPPING.values()
+    return isinstance(value, _Func)
 
 
 def should_skip_next_space(token, next_token):
@@ -130,4 +137,4 @@ def spaced_query(query):
 
 
 def serialize_query_tokens(query):
-    return u"".join(spaced_query(query))
+    return u"".join(map(str, spaced_query(query)))

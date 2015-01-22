@@ -1,5 +1,6 @@
 """
 """
+from functools import partial
 from sqlquery import _querybuilder
 from sqlquery._querybuilder import QueryBuilder
 
@@ -59,11 +60,67 @@ def DESC(field):
 
 def COUNT(field=None):
     """
-    The count function for a select clause, e.g. `SELECT COUNT(x) ...`
+    The count function for a select/where/having clause,
+    e.g.
+    ::
+
+        `SELECT COUNT(x) ...`
+
     *field* is an optional argument which should be column name. If it is not
     present then `COUNT(1)` is generated
     """
     return _querybuilder.count(field)
+
+
+def MAX(field):
+    """
+    The max function for a select/where/having clause, e.g. `SELECT MAX(x) ...`
+    *field* should be a column name.
+    """
+    return _querybuilder.max(field)
+
+
+def MIN(field):
+    """
+    The same as :py:func:`~.MAX` but instead generating a `MIN` function.
+    """
+    return _querybuilder.min(field)
+
+
+def SUM(field):
+    """
+    The same as :py:func:`~.MAX` but instead generating a `SUM` function.
+    """
+    return _querybuilder.sum(field)
+
+
+def UTCNOW():
+    """
+    Generates the scalar `UTC_NOW()` function.
+    """
+    return _querybuilder.utcnow()
+
+
+def UNIX_TIMESTAMP():
+    """
+    Generates the scalar `UTC_NOW()` function.
+    """
+    return _querybuilder.unix_timestamp()
+
+
+def create_function_builder(sql_func):
+    """
+    Create a custom SQL function builder. This allows you to extend the current
+    functionality to apply a custom function.
+    For example, say you had a function named `MOVING_AVG`, then you could do:
+    ::
+
+        >>> moving_avg = create_function_builder("MOVING_AVG")
+        >>> select(moving_avg("temperature")).on_table("weather").sql()
+        (u'SELECT MOVING_AVG(`a`.`temperature`) FROM `weather` AS `a`', ())
+
+    """
+    return partial(_querybuilder.SQLFunction, sql_func)
 
 
 def select(*names):

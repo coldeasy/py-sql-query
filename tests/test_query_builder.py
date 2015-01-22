@@ -2,6 +2,7 @@ from collections import OrderedDict
 from mock import patch
 from unittest import TestCase
 
+from sqlquery import queryapi
 from sqlquery.queryapi import COUNT, AND, OR, XOR, ASC, DESC
 from sqlquery.queryapi import InvalidQueryException
 from sqlquery._querybuilder import QueryBuilder, serialize_query_tokens
@@ -112,6 +113,41 @@ class SQLCompilerSelectTestCase(_BaseTestCase):
             self.builder.select().on_table(
                 "table"
             ).sql()
+
+
+class SQLCompilerFuncsTestCase(_BaseTestCase):
+    def test_aggregate_funcs(self):
+        for func in ("COUNT", "MAX", "MIN", "SUM"):
+            sql, args = self.builder.select(
+                getattr(queryapi, func)("test")
+            ).on_table("table").sql()
+
+            self.assertEqual(
+                "SELECT {}(`a`.`test`) FROM `table` AS `a`".format(func),
+                sql
+            )
+            self.assertEqual(
+                (),
+                args
+            )
+
+    def test_scalar_funcs(self):
+        for (func, sqlfunc) in (
+            ("UTCNOW", "UTC_TIMESTAMP"),
+            ("UNIX_TIMESTAMP", "UNIX_TIMESTAMP"),
+        ):
+            sql, args = self.builder.select(
+                getattr(queryapi, func)()
+            ).on_table("table").sql()
+
+            self.assertEqual(
+                "SELECT {}() FROM `table` AS `a`".format(sqlfunc),
+                sql
+            )
+            self.assertEqual(
+                (),
+                args
+            )
 
 
 class SQLCompilerWhereTestCase(_BaseTestCase):
@@ -297,7 +333,7 @@ class SQLCompilerHavingTestCase(_BaseTestCase):
     def test__generate_having_aggregate_func(self):
         compiler = self.basic_select.where(
             OR(("test1__is", None), ("test2__is", None))
-        ).group_by("test1").having(("test1__count__gt", 1)).compiler()
+        ).group_by("test1").having((COUNT("test1"), "gt", 1)).compiler()
 
         sql, args = compiler._generate_having()
 

@@ -7,8 +7,8 @@ from sqlquery.sqlencoding import (
     in_brackets,
     quoted,
     encode_field,
-    encode_func,
     encode_table_name,
+    encode_func_name,
     convert_op,
     convert_func,
     SQL_NULL,
@@ -45,6 +45,26 @@ def logical_xor(conditions):
 
 def count(field):
     return SQLFunction(convert_func("count"), field or Literal('1'))
+
+
+def max(field):
+    return SQLFunction(convert_func("max"), field)
+
+
+def min(field):
+    return SQLFunction(convert_func("min"), field)
+
+
+def sum(field):
+    return SQLFunction(convert_func("sum"), field)
+
+
+def utcnow():
+    return SQLFunction(convert_func("utcnow"))
+
+
+def unix_timestamp():
+    return SQLFunction(convert_func("unix_timestamp"))
 
 
 def order_descending(field):
@@ -398,6 +418,7 @@ class SQLCompiler(object):
             )
         self.query_data = query_data
 
+    # Encoding to valid SQL functions
     def _encode_main_table_name(self, include_alias=True):
         return encode_table_name(
             self.query_data.table.name,
@@ -439,6 +460,49 @@ class SQLCompiler(object):
             return self._encode_join_field(field)
 
         return self._encode_field(field)
+
+    # Parsing user-data functions
+    @staticmethod
+    def _parse_field_spec(field_spec):
+        """
+        Returns (func, field, op)
+        """
+        try:
+            field, op = field_spec.split('__')
+            return field, op
+        except ValueError:
+            raise InvalidQueryException(
+                "Invalid where clause <{}>".format(field_spec)
+            )
+
+    def _parse_where_clause_spec(self, clause):
+        if isinstance(clause, dict):
+            assert len(clause) == 1
+            clause = clause.items()
+
+        if isinstance(clause, (tuple, list)):
+            if len(clause) == 3:
+                return clause
+            if len(clause) == 2:
+                field_op, value = clause
+                field, op = self._parse_field_spec(field_op)
+                return field, op, value
+
+        raise InvalidQueryException("Unknown where element %s" % clause)
+
+    # Generating sequences of valid SQL functions
+    def _generate_field(self, field):
+        query = []
+        if isinstance(field, SQLFunction):
+            func = encode_func_name(field.function)
+            query.append(func)
+            with in_brackets(query):
+                for field in _query_joiner(query, field.fields):
+                    query.append(self._smart_encode_field(field))
+        else:
+            query.append(self._smart_encode_field(field))
+
+        return query
 
     def _generate_join(self):
         query = [
@@ -514,47 +578,18 @@ class SQLCompiler(object):
     def _generate_select(self):
         query = [u"SELECT"]
         for field in _query_joiner(query, self.query_data.select):
-            if isinstance(field, SQLFunction):
-                query.append(field.function)
-                with in_brackets(query):
-                    for field in _query_joiner(query, field.fields):
-                        query.append(self._smart_encode_field(field))
-            else:
-                query.append(self._smart_encode_field(field))
+            query.extend(self._generate_field(field))
 
         query.extend(["FROM", self._encode_main_table_name()])
         if self.query_data.join:
             query.extend(self._generate_join())
         return query, []
 
-    @staticmethod
-    def _parse_field_spec(field_spec):
-        """
-        Returns (func, field, op)
-        """
-        try:
-            field, func, op = field_spec.split('__')
-            return (func, field, op)
-        except ValueError:
-            try:
-                field, op = field_spec.split('__')
-                return (None, field, op)
-            except ValueError:
-                raise InvalidQueryException(
-                    "Invalid where clause <{}>".format(field_spec)
-                )
-
-    def _generate_single_where_clause(self, field_op, value):
-        func, field, op = self._parse_field_spec(field_op)
-
-        if func:
-            field = encode_func(func, self._smart_encode_field(field))
-        else:
-            field = self._smart_encode_field(field)
-
+    def _generate_single_where_clause(self, field, op, value):
         clause = []
         with in_brackets(clause):
-            clause.extend([field, convert_op(op)])
+            clause.extend(self._generate_field(field))
+            clause.append(convert_op(op))
             if isinstance(value, QueryBuilder):
                 with in_brackets(clause):
                     sql, sql_args = SQLCompiler(value._query_data,
@@ -590,18 +625,9 @@ class SQLCompiler(object):
                     query.extend(query2)
                     args.extend(args2)
             else:
-                if isinstance(sub_clause, (tuple, list)):
-                    assert len(sub_clause) == 2
-                    field_op, value = sub_clause
-                elif isinstance(sub_clause, dict):
-                    assert len(sub_clause) == 1
-                    field_op, value = sub_clause.items()
-                else:
-                    raise InvalidQueryException("Unknown where element %s"
-                                                % sub_clause)
-
+                field, op, value = self._parse_where_clause_spec(sub_clause)
                 clause, clause_args = self._generate_single_where_clause(
-                    field_op, value
+                    field, op, value
                 )
                 query.extend(clause)
                 args.extend(clause_args)
