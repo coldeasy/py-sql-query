@@ -2,23 +2,8 @@ import string
 import itertools
 import collections
 from collections import namedtuple
-from sqlquery.sqlencoding import (
-    serialize_query_tokens,
-    in_brackets,
-    quoted,
-    encode_field,
-    encode_table_name,
-    encode_func_name,
-    convert_op,
-    convert_func,
-    SQL_NULL,
-    SQL_ASC,
-    SQL_DESC,
-    SQL_AND,
-    SQL_OR,
-    SQL_XOR,
-    SQL_JOIN_TYPE_INNER
-)
+from sqlquery.sqlencoding import BasicEncodings
+from sqlquery.sqlencoding import Literal
 
 from six import string_types
 
@@ -32,58 +17,47 @@ class InvalidQueryException(Exception):
 
 
 def logical_and(conditions):
-    return _LogicalOperator(conditions, SQL_AND)
+    return _LogicalOperator(conditions, "and")
 
 
 def logical_or(conditions):
-    return _LogicalOperator(conditions, SQL_OR)
+    return _LogicalOperator(conditions, "or")
 
 
 def logical_xor(conditions):
-    return _LogicalOperator(conditions, SQL_XOR)
+    return _LogicalOperator(conditions, "xor")
 
 
 def count(field):
-    return SQLFunction(convert_func("count"), field or Literal('1'))
+    return SQLFunction("count", field or Literal('1'))
 
 
 def max(field):
-    return SQLFunction(convert_func("max"), field)
+    return SQLFunction("max", field)
 
 
 def min(field):
-    return SQLFunction(convert_func("min"), field)
+    return SQLFunction("min", field)
 
 
 def sum(field):
-    return SQLFunction(convert_func("sum"), field)
+    return SQLFunction("sum", field)
 
 
 def utcnow():
-    return SQLFunction(convert_func("utcnow"))
+    return SQLFunction("utcnow")
 
 
 def unix_timestamp():
-    return SQLFunction(convert_func("unix_timestamp"))
+    return SQLFunction("unix_timestamp")
 
 
 def order_descending(field):
-    return _SQLOrdering(field, SQL_DESC)
+    return _SQLOrdering(field, "desc")
 
 
 def order_ascending(field):
-    return _SQLOrdering(field, SQL_ASC)
-
-
-class Literal(object):
-    def __init__(self, value):
-        self.value = value
-
-    def __str__(self):
-        return self.value
-
-    def __repr__(self):
-        return self.value
+    return _SQLOrdering(field, "asc")
 
 
 class _LogicalOperator(object):
@@ -292,7 +266,7 @@ class QueryBuilder(object):
         """
         return self._replace(
             join=JoinOptions(
-                join_type=SQL_JOIN_TYPE_INNER,
+                join_type="inner",
                 main_field=main_field,
                 join_field=join_field or main_field,
                 table=TableOptions(
@@ -400,6 +374,7 @@ def _query_joiner(query, iterable, join_with=", "):
 class SQLCompiler(object):
     def __init__(self, query_data, alias_gen=None):
         # generate the aliases
+        self._encoder = BasicEncodings()
         if alias_gen:
             self.alias_gen = alias_gen
         else:
@@ -420,7 +395,7 @@ class SQLCompiler(object):
 
     # Encoding to valid SQL functions
     def _encode_main_table_name(self, include_alias=True):
-        return encode_table_name(
+        return self._encoder.encode_table_name(
             self.query_data.table.name,
             self.query_data.table.alias,
             self.query_data.table.schema,
@@ -428,7 +403,7 @@ class SQLCompiler(object):
         )
 
     def _encode_join_table_name(self):
-        return encode_table_name(
+        return self._encoder.encode_table_name(
             self.query_data.join.table.name,
             self.query_data.join.table.alias,
             self.query_data.join.table.schema,
@@ -436,7 +411,7 @@ class SQLCompiler(object):
         )
 
     def _encode_field(self, field):
-        return encode_field(
+        return self._encoder.encode_field(
             field,
             self.query_data.table.name,
             self.query_data.table.alias,
@@ -444,7 +419,7 @@ class SQLCompiler(object):
         )
 
     def _encode_join_field(self, field):
-        return encode_field(
+        return self._encoder.encode_field(
             field,
             self.query_data.join.table.name,
             self.query_data.join.table.alias,
@@ -460,6 +435,9 @@ class SQLCompiler(object):
             return self._encode_join_field(field)
 
         return self._encode_field(field)
+
+    def _quoted(self, value):
+        return self._encoder.quoted(value)
 
     # Parsing user-data functions
     @staticmethod
@@ -494,9 +472,9 @@ class SQLCompiler(object):
     def _generate_field(self, field):
         query = []
         if isinstance(field, SQLFunction):
-            func = encode_func_name(field.function)
+            func = self._encoder.encode_func_name(field.function)
             query.append(func)
-            with in_brackets(query):
+            with self._encoder.in_brackets(query):
                 for field in _query_joiner(query, field.fields):
                     query.append(self._smart_encode_field(field))
         else:
@@ -506,7 +484,7 @@ class SQLCompiler(object):
 
     def _generate_join(self):
         query = [
-            self.query_data.join.join_type,
+            self._encoder.encode_join_type(self.query_data.join.join_type),
             self._encode_join_table_name(),
             u"ON",
             self._encode_field(self.query_data.join.main_field),
@@ -548,8 +526,8 @@ class SQLCompiler(object):
             self._encode_main_table_name(include_alias=False),
         ]
         columns = self.query_data.insert[0].keys()
-        with in_brackets(query):
-            query.append(u", ".join(map(quoted, columns)))
+        with self._encoder.in_brackets(query):
+            query.append(u", ".join(map(self._quoted, columns)))
         query.append(u"VALUES")
 
         args = []
@@ -557,7 +535,7 @@ class SQLCompiler(object):
             if len(col_values.keys()) != len(columns):
                 raise InvalidQueryException("Invalid number of column values")
 
-            with in_brackets(query):
+            with self._encoder.in_brackets(query):
                 for col in _query_joiner(query, columns):
                     query.append(u"%s")
                     args.append(col_values[col])
@@ -567,10 +545,10 @@ class SQLCompiler(object):
             update_col_values = self.query_data.duplicate_key_update[1]
             if not update_col_values:
                 for col in _query_joiner(query, columns):
-                    query.append(u"{0}=VALUES({0})".format(quoted(col)))
+                    query.append(u"{0}=VALUES({0})".format(self._quoted(col)))
             else:
                 for col in _query_joiner(query, update_col_values):
-                    query.append(u"{}=VALUES(%s)".format(quoted(col)))
+                    query.append(u"{}=VALUES(%s)".format(self._quoted(col)))
                     args.append(update_col_values[col])
 
         return query, args
@@ -587,11 +565,11 @@ class SQLCompiler(object):
 
     def _generate_single_where_clause(self, field, op, value):
         clause = []
-        with in_brackets(clause):
+        with self._encoder.in_brackets(clause):
             clause.extend(self._generate_field(field))
-            clause.append(convert_op(op))
+            clause.append(self._encoder.encode_op(op))
             if isinstance(value, QueryBuilder):
-                with in_brackets(clause):
+                with self._encoder.in_brackets(clause):
                     sql, sql_args = SQLCompiler(value._query_data,
                                                 self.alias_gen)._raw_sql()
                     clause.extend(sql)
@@ -603,7 +581,7 @@ class SQLCompiler(object):
                 args = list(value)
                 clause.append(u"({})".format(u",".join([u"%s"] * len(args))))
             elif value is None:
-                clause.append(SQL_NULL)
+                clause.append(self._encoder.encode_null())
                 # we get rid of the value as it is represented as null
                 args = []
             else:
@@ -615,10 +593,12 @@ class SQLCompiler(object):
     def _generate_where_tableclause(self, clause):
         query, args = [], []
         for sub_clause in _query_joiner(
-            query, clause.conditions, clause.operator
+            query,
+            clause.conditions,
+            self._encoder.encode_logical_op(clause.operator)
         ):
             if isinstance(sub_clause, _LogicalOperator):
-                with in_brackets(query):
+                with self._encoder.in_brackets(query):
                     query2, args2 = self._generate_where_tableclause(
                         sub_clause
                     )
@@ -666,7 +646,7 @@ class SQLCompiler(object):
                 query.extend(
                     [
                         self._smart_encode_field(order_by.field),
-                        order_by.direction
+                        self._encoder.encode_order_by_dir(order_by.direction)
                     ]
                 )
 
@@ -726,6 +706,6 @@ class SQLCompiler(object):
         sql, sql_args = self._raw_sql()
 
         return (
-            serialize_query_tokens(sql),
+            self._encoder.serialize_query_tokens(sql),
             sql_args
         )

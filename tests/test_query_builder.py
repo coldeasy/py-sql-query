@@ -5,7 +5,11 @@ from unittest import TestCase
 from sqlquery import queryapi
 from sqlquery.queryapi import COUNT, AND, OR, XOR, ASC, DESC
 from sqlquery.queryapi import InvalidQueryException
-from sqlquery._querybuilder import QueryBuilder, serialize_query_tokens
+from sqlquery._querybuilder import QueryBuilder
+from sqlquery.sqlencoding import BasicEncodings
+
+
+serialize_query_tokens = BasicEncodings().serialize_query_tokens
 
 
 def _ordered_dict_from_dict(unordered_dict):
@@ -80,7 +84,7 @@ class SQLCompilerSelectTestCase(_BaseTestCase):
         sql, args = compiler._generate_select()
 
         self.assertEqual(
-            ("SELECT COUNT(`1`) FROM `table` AS `a`", []),
+            ("SELECT COUNT(1) FROM `table` AS `a`", []),
             (serialize_query_tokens(sql), args)
         )
 
@@ -210,8 +214,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
 
         self.assertEqual(
             "WHERE (`a`.`test1` IN (SELECT `b`.`id` FROM `table2` AS `b` "
-            "WHERE (`b`.`test2` <=> %s)))"
-            ,
+            "WHERE (`b`.`test2` <=> %s)))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(args, [4])
