@@ -12,7 +12,7 @@ class Literal(str):
 class BasicEncodings(object):
     OPERATOR_MAPPING = {
         # Comparison
-        'eq': "<=>",
+        'eq': "=",
         'neq': "<>",
         'gte': ">=",
         'gt': ">",

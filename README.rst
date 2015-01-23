@@ -15,7 +15,7 @@ A simple select statement
 
     >>> from sqlquery.queryapi import select
     >>> select("id").on_table("users").where(("id__eq", 2)).sql()
-    (u'SELECT `a`.`id` FROM `users` AS `a` WHERE (`a`.`id` <=> %s)', (2,))
+    (u'SELECT `a`.`id` FROM `users` AS `a` WHERE (`a`.`id` = %s)', (2,))
 
 A simple update statement
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -23,7 +23,7 @@ A simple update statement
 
     >>> from sqlquery.queryapi import select
     >>> update(username="john").on_table("users").where(("id__eq", 2)).sql()
-    (u'UPDATE `users` AS `a` SET `a`.`username` = %s WHERE (`a`.`id` <=> %s)', ('john', 2))
+    (u'UPDATE `users` AS `a` SET `a`.`username` = %s WHERE (`a`.`id` = %s)', ('john', 2))
 
 A simple insert statement
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -68,6 +68,6 @@ A more involved statement
         ).where(
           ('id__in', [1, 2, 3, 4]), ('contactinfo.country__eq', 'US')
         ).limit(10).offset(10).order_by("id").sql()
-    (u'SELECT `a`.`username`, `a`.`id`, `b`.`address` FROM `users` AS `a` INNER JOIN `contactinfo` AS `b` ON `a`.`id` = `b`.`id` WHERE (`a`.`id` IN (%s,%s,%s,%s)) AND (`b`.`country` <=> %s) ORDER BY `a`.`id` OFFSET %s LIMIT %s',
-     ([1, 2, 3, 4], 'US', 10, 10))
+    (u'SELECT `a`.`username`, `a`.`id`, `b`.`address` FROM `users` AS `a` INNER JOIN `contactinfo` AS `b` ON `a`.`id` = `b`.`id` WHERE (`a`.`id` IN (%s,%s,%s,%s)) AND (`b`.`country` = %s) ORDER BY `a`.`id` OFFSET %s LIMIT %s',
+     (1, 2, 3, 4, 'US', 10, 10))
 

@@ -159,7 +159,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         super(SQLCompilerWhereTestCase, self).setUp()
         self.basic_select = self.builder.select("test").on_table("table")
         self.op_mapping = {
-            'eq': "<=>",
+            'eq': "=",
             'neq': "<>",
             'gte': ">=",
             'gt': ">",
@@ -214,7 +214,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
 
         self.assertEqual(
             "WHERE (`a`.`test1` IN (SELECT `b`.`id` FROM `table2` AS `b` "
-            "WHERE (`b`.`test2` <=> %s)))",
+            "WHERE (`b`.`test2` = %s)))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(args, [4])
@@ -242,7 +242,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         sql, args = compiler._generate_where()
 
         self.assertEqual(
-            "WHERE (`a`.`test1` <=> %s) AND (`a`.`test2` <=> %s)",
+            "WHERE (`a`.`test1` = %s) AND (`a`.`test2` = %s)",
             serialize_query_tokens(sql)
         )
         self.assertEqual(
@@ -258,7 +258,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         sql, args = compiler._generate_where()
 
         self.assertEqual(
-            "WHERE ((`a`.`test1` <=> %s) OR (`a`.`test2` <=> %s))",
+            "WHERE ((`a`.`test1` = %s) OR (`a`.`test2` = %s))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(
@@ -274,7 +274,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         sql, args = compiler._generate_where()
 
         self.assertEqual(
-            "WHERE ((`a`.`test1` <=> %s) AND (`a`.`test2` <=> %s))",
+            "WHERE ((`a`.`test1` = %s) AND (`a`.`test2` = %s))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(
@@ -290,8 +290,8 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         sql, args = compiler._generate_where()
 
         self.assertEqual(
-            "WHERE (((`a`.`test1` <=> %s) OR (`a`.`test1` <=> %s)) "
-            "AND (`a`.`test2` <=> %s))",
+            "WHERE (((`a`.`test1` = %s) OR (`a`.`test1` = %s)) "
+            "AND (`a`.`test2` = %s))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(
@@ -315,10 +315,10 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
 
         self.assertEqual(
             "WHERE ("
-            "((`a`.`test1` <=> %s) OR (`a`.`test1` <=> %s)) "
-            "AND ((`a`.`test3` <=> %s) AND (`a`.`test5` <=> %s) "
-            "AND ((`a`.`test1` <=> %s) OR (`a`.`test1` <=> %s))) "
-            "AND ((`a`.`test3` <=> %s) XOR (`a`.`test5` <=> %s)))",
+            "((`a`.`test1` = %s) OR (`a`.`test1` = %s)) "
+            "AND ((`a`.`test3` = %s) AND (`a`.`test5` = %s) "
+            "AND ((`a`.`test1` = %s) OR (`a`.`test1` = %s))) "
+            "AND ((`a`.`test3` = %s) XOR (`a`.`test5` = %s)))",
             serialize_query_tokens(sql)
         )
         self.assertEqual(
@@ -579,8 +579,8 @@ class SQLCompilerCompositeTestCase(_BaseTestCase):
         sql, args = compiler.sql()
 
         self.assertEqual(
-            "SELECT `a`.`test` FROM `table` AS `a` WHERE (`a`.`test` <=> %s) "
-            "AND (`a`.`test2` <=> %s) ORDER BY `a`.`test` OFFSET %s LIMIT %s",
+            "SELECT `a`.`test` FROM `table` AS `a` WHERE (`a`.`test` = %s) "
+            "AND (`a`.`test2` = %s) ORDER BY `a`.`test` OFFSET %s LIMIT %s",
             sql
         )
         self.assertEqual(
@@ -600,9 +600,9 @@ class SQLCompilerCompositeTestCase(_BaseTestCase):
         sql, args = compiler.sql()
 
         self.assertEqual(
-            "SELECT `a`.`test` FROM `table` AS `a` WHERE (`a`.`test` <=> %s) "
-            "AND (`a`.`test2` <=> %s) GROUP BY `a`.`test` "
-            "HAVING (`a`.`test2` <=> %s) OFFSET %s LIMIT %s",
+            "SELECT `a`.`test` FROM `table` AS `a` WHERE (`a`.`test` = %s) "
+            "AND (`a`.`test2` = %s) GROUP BY `a`.`test` "
+            "HAVING (`a`.`test2` = %s) OFFSET %s LIMIT %s",
             sql
         )
         self.assertEqual(
@@ -628,7 +628,7 @@ class SQLCompilerJoinTestCase(_BaseTestCase):
         self.assertEqual(
             "SELECT `a`.`test`, `a`.`test2` FROM `table` AS `a` "
             "INNER JOIN `table2` AS `b` ON `a`.`field1` = `b`.`field1` "
-            "WHERE (`a`.`test` <=> %s) AND (`a`.`test2` <=> %s) "
+            "WHERE (`a`.`test` = %s) AND (`a`.`test2` = %s) "
             "ORDER BY `a`.`test` OFFSET %s LIMIT %s",
             sql
         )
@@ -653,7 +653,7 @@ class SQLCompilerJoinTestCase(_BaseTestCase):
             "SELECT `a`.`test`, `a`.`test2`, `b`.`field1` "
             "FROM `table` AS `a` "
             "INNER JOIN `z_other` AS `b` ON `a`.`field1` = `b`.`field1` "
-            "WHERE (`a`.`test` <=> %s) AND (`a`.`test2` <=> %s) "
+            "WHERE (`a`.`test` = %s) AND (`a`.`test2` = %s) "
             "ORDER BY `a`.`test` OFFSET %s LIMIT %s",
             sql
         )
@@ -678,8 +678,8 @@ class SQLCompilerJoinTestCase(_BaseTestCase):
             "SELECT `a`.`test`, `a`.`test2`, `b`.`field1` "
             "FROM `table` AS `a` "
             "INNER JOIN `z_other` AS `b` ON `a`.`field1` = `b`.`field1` "
-            "WHERE (`a`.`test` <=> %s) AND (`a`.`test2` <=> %s) "
-            "AND (`b`.`field1` <=> %s) "
+            "WHERE (`a`.`test` = %s) AND (`a`.`test2` = %s) "
+            "AND (`b`.`field1` = %s) "
             "ORDER BY `a`.`test` OFFSET %s LIMIT %s",
             sql
         )

@@ -21,7 +21,7 @@ thoroughly production tested.
 
     >>> from sqlquery.queryapi import select
     >>> select("id").on_table("users").where(("id__eq", 2)).sql()
-    (u'SELECT `a`.`id` FROM `users` AS `a` WHERE (`a`.`id` <=> %s)', (2,))
+    (u'SELECT `a`.`id` FROM `users` AS `a` WHERE (`a`.`id` = %s)', (2,))
 
 
 Indices and tables
