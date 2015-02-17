@@ -21,7 +21,7 @@ A simple update statement
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 .. code-block:: python
 
-    >>> from sqlquery.queryapi import select
+    >>> from sqlquery.queryapi import update
     >>> update(username="john").on_table("users").where(("id__eq", 2)).sql()
     (u'UPDATE `users` AS `a` SET `a`.`username` = %s WHERE (`a`.`id` = %s)', ('john', 2))
 
@@ -29,7 +29,7 @@ A simple insert statement
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 .. code-block:: python
 
-    >>> from sqlquery.queryapi import select
+    >>> from sqlquery.queryapi import insert
     >>> insert(username="john", id=4).on_table("users").sql()
     (u'INSERT INTO `users` (`username`, `id`) VALUES (%s, %s)', ('john', 4))
 
