@@ -41,7 +41,7 @@ setup(
     license='Apache 2.0',
     zip_safe=True,
     classifiers=(
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'License :: OSI Approved :: Apache Software License',
