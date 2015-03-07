@@ -1,7 +1,7 @@
 py-sql-query
 ============
 
-py-sql-query is a basic and pre-alpha SQL translation layer in
+py-sql-query is a basic SQL translation layer in
 python. You construct queries using mainly python constructs which later can be
 serialized to a SQL query.
 
