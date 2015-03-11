@@ -336,15 +336,15 @@ class QueryBuilder(object):
         """
         return self._replace(limit=int(count))
 
-    def compiler(self):
+    def compiler(self, encoder=None):
         """
         Returns the compiler that will be used to generate the final query. In
         most cases you won't need to call this, and instead :py:meth:`~.sql`
         will all that's needed.
         """
-        return SQLCompiler(self._query_data)
+        return SQLCompiler(self._query_data, encoder=encoder)
 
-    def sql(self):
+    def sql(self, encoder=None):
         """
         Composes the current query and returns a tuple containing:
 
@@ -361,7 +361,7 @@ class QueryBuilder(object):
         query and should also be passed to the DB client library. Each argument
         will have a "%s" placeholder in the query string.
         """
-        return SQLCompiler(self._query_data).sql()
+        return self.compiler(encoder=encoder).sql()
 
 
 def _query_joiner(query, iterable, join_with=", "):
@@ -372,9 +372,9 @@ def _query_joiner(query, iterable, join_with=", "):
 
 
 class SQLCompiler(object):
-    def __init__(self, query_data, alias_gen=None):
+    def __init__(self, query_data, alias_gen=None, encoder=None):
         # generate the aliases
-        self._encoder = BasicEncodings()
+        self._encoder = encoder or BasicEncodings()
         if alias_gen:
             self.alias_gen = alias_gen
         else:

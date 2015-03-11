@@ -1,60 +1,14 @@
-from collections import OrderedDict
-from mock import patch
-from unittest import TestCase
-
 from sqlquery import queryapi
 from sqlquery.queryapi import COUNT, AND, OR, XOR, ASC, DESC
 from sqlquery.queryapi import InvalidQueryException
-from sqlquery._querybuilder import QueryBuilder
 from sqlquery.sqlencoding import BasicEncodings
 
+from tests import BaseTestCase
 
 serialize_query_tokens = BasicEncodings().serialize_query_tokens
 
 
-def _ordered_dict_from_dict(unordered_dict):
-    ordered = OrderedDict()
-    for key in sorted(unordered_dict.keys()):
-        ordered[key] = unordered_dict[key]
-
-    return ordered
-
-
-def _ordered_copy(self, **kwargs):
-    if 'update' in kwargs:
-        kwargs['update'] = _ordered_dict_from_dict(kwargs['update'])
-    if 'insert' in kwargs:
-        kwargs['insert'] = [
-            _ordered_dict_from_dict(row)
-            for row in kwargs['insert']
-        ]
-
-    for list_entry in ('select', 'having', 'group_by', 'where'):
-        if list_entry in kwargs:
-            if isinstance(kwargs[list_entry], tuple):
-                kwargs[list_entry] = tuple(sorted(kwargs[list_entry]))
-            elif isinstance(kwargs[list_entry], list):
-                kwargs[list_entry] = sorted(kwargs[list_entry])
-            else:
-                kwargs[list_entry] = kwargs[list_entry]
-
-    return QueryBuilder(self._query_data._replace(**kwargs))
-
-
-class _BaseTestCase(TestCase):
-    def setUp(self):
-        self._patch_start_query_builder_replace()
-        self.builder = QueryBuilder()
-
-    def tearDown(self):
-        self.__patched.__exit__()
-
-    def _patch_start_query_builder_replace(self):
-        self.__patched = patch.object(QueryBuilder, '_replace', _ordered_copy)
-        self.__patched.__enter__()
-
-
-class SQLCompilerSelectTestCase(_BaseTestCase):
+class SQLCompilerSelectTestCase(BaseTestCase):
     def test__generate_select_single_element(self):
         compiler = self.builder.select("test").on_table("table").compiler()
 
@@ -119,7 +73,7 @@ class SQLCompilerSelectTestCase(_BaseTestCase):
             ).sql()
 
 
-class SQLCompilerFuncsTestCase(_BaseTestCase):
+class SQLCompilerFuncsTestCase(BaseTestCase):
     def test_aggregate_funcs(self):
         for func in ("COUNT", "MAX", "MIN", "SUM"):
             sql, args = self.builder.select(
@@ -154,7 +108,7 @@ class SQLCompilerFuncsTestCase(_BaseTestCase):
             )
 
 
-class SQLCompilerWhereTestCase(_BaseTestCase):
+class SQLCompilerWhereTestCase(BaseTestCase):
     def setUp(self):
         super(SQLCompilerWhereTestCase, self).setUp()
         self.basic_select = self.builder.select("test").on_table("table")
@@ -327,7 +281,7 @@ class SQLCompilerWhereTestCase(_BaseTestCase):
         )
 
 
-class SQLCompilerHavingTestCase(_BaseTestCase):
+class SQLCompilerHavingTestCase(BaseTestCase):
     # Most of having functionality is already covered by `where` cases
     def setUp(self):
         super(SQLCompilerHavingTestCase, self).setUp()
@@ -347,7 +301,7 @@ class SQLCompilerHavingTestCase(_BaseTestCase):
         self.assertEqual(args, [1])
 
 
-class SQLCompilerInsertTestCase(_BaseTestCase):
+class SQLCompilerInsertTestCase(BaseTestCase):
     def _iter_each_insert_fun(self):
         for (fun, query) in [
             (self.builder.insert, "INSERT"),
@@ -411,7 +365,7 @@ class SQLCompilerInsertTestCase(_BaseTestCase):
             )
 
 
-class SQLCompilerUpdateTestCase(_BaseTestCase):
+class SQLCompilerUpdateTestCase(BaseTestCase):
     def test__generate_update_single_field(self):
         compiler = self.builder.update(
             test=1
@@ -445,7 +399,7 @@ class SQLCompilerUpdateTestCase(_BaseTestCase):
         )
 
 
-class SQLCompilerOffsetTestCase(_BaseTestCase):
+class SQLCompilerOffsetTestCase(BaseTestCase):
     def test__generate_offset(self):
         compiler = self.builder.select(
             "test"
@@ -463,7 +417,7 @@ class SQLCompilerOffsetTestCase(_BaseTestCase):
         )
 
 
-class SQLCompilerLimitTestCase(_BaseTestCase):
+class SQLCompilerLimitTestCase(BaseTestCase):
     def test__generate_limit(self):
         compiler = self.builder.select(
             "test"
@@ -481,7 +435,7 @@ class SQLCompilerLimitTestCase(_BaseTestCase):
         )
 
 
-class SQLCompilerOrderByTestCase(_BaseTestCase):
+class SQLCompilerOrderByTestCase(BaseTestCase):
     def test__generate_order_by(self):
         compiler = self.builder.select(
             "test"
@@ -540,7 +494,7 @@ class SQLCompilerOrderByTestCase(_BaseTestCase):
         self.assertEqual(args, [])
 
 
-class SQLCompilerGroupByTestCase(_BaseTestCase):
+class SQLCompilerGroupByTestCase(BaseTestCase):
     def test__generate_group_by(self):
         compiler = self.builder.select(
             "test"
@@ -568,7 +522,7 @@ class SQLCompilerGroupByTestCase(_BaseTestCase):
         self.assertEqual(args, [])
 
 
-class SQLCompilerCompositeTestCase(_BaseTestCase):
+class SQLCompilerCompositeTestCase(BaseTestCase):
     def test__generate_full_select_query_ordered_by(self):
         compiler = self.builder.select(
             "test"
@@ -612,7 +566,7 @@ class SQLCompilerCompositeTestCase(_BaseTestCase):
         )
 
 
-class SQLCompilerJoinTestCase(_BaseTestCase):
+class SQLCompilerJoinTestCase(BaseTestCase):
     def test__generate_full_join_simple_select(self):
         compiler = self.builder.select(
             "test", "test2"

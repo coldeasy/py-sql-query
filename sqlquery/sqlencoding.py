@@ -160,3 +160,10 @@ class BasicEncodings(object):
 
     def serialize_query_tokens(self, query):
         return u"".join(map(str, self.spaced_query(query)))
+
+
+class ANSIEncodings(BasicEncodings):
+    def quoted(self, element):
+        if element.startswith('"') and element.endswith('"'):
+            return element
+        return u'"{!s}"'.format(element)
