@@ -1,3 +1,6 @@
+DO NOT USE IN PRODUCTION
+============
+
 py-sql-query
 ============
 
